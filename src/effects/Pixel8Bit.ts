@@ -58,6 +58,7 @@ export class Pixel8Bit {
 
           // 8-bit 调色板量化（16 级，色彩更平滑美观）
           color.rgb = floor(color.rgb * 16.0 + 0.5) / 16.0;
+          color.a = ceil(color.a * 4.0 + 0.5) / 4.0; // alpha 也量化避免闪烁
 
           // 整体提亮，避免暗黑压抑
           color.rgb = color.rgb * 1.12 + 0.06;
@@ -70,7 +71,7 @@ export class Pixel8Bit {
           float scanline = sin(vUv.y * block * 2.0) * 0.5 + 0.5;
           color.rgb += scanline * 0.05;
 
-          gl_FragColor = vec4(color.rgb, 1.0);
+          gl_FragColor = vec4(color.rgb, color.a);
         }
       `,
     });

@@ -20,6 +20,8 @@ export class EffectComposer {
   private screen: ScreenInfo;
   private perfCap: number = 1.5;
   private currentTheme: Theme | null = null;
+  /** macOS 嵌入桌面模式：只叠加效果，不渲染壁纸图像（系统桌面/图标/小组件透出） */
+  private embedDesktop: boolean = false;
 
   private beatPulse: BeatPulse;
   private colorShift: ColorShift;
@@ -76,6 +78,12 @@ export class EffectComposer {
     this.animate();
   }
 
+  /** 切换嵌入桌面模式：隐藏壁纸图像层，只保留效果叠加 */
+  setEmbedDesktop(flag: boolean) {
+    this.embedDesktop = flag;
+    this.bgMesh.visible = !flag;
+  }
+
   /** 性能模式：像素比上限 + 粒子上限 */
   setPerformanceMode(mode: 'high' | 'balanced' | 'energy') {
     this.perfCap = mode === 'high' ? 1.5 : mode === 'balanced' ? 1.25 : 1.0;
@@ -85,6 +93,7 @@ export class EffectComposer {
   }
 
   setTexture(texture: THREE.Texture) {
+    if (this.embedDesktop) return; // 嵌入模式不渲染壁纸图像
     // 只替换材质，不能 remove mesh（否则网格移出场景导致空白）
     const newMat = new THREE.MeshBasicMaterial({ map: texture });
     (this.bgMesh.material as THREE.Material).dispose();
@@ -149,8 +158,8 @@ export class EffectComposer {
     this.currentTheme = theme;
     const p = theme.params;
 
-    if (theme.effects.pulse) this.beatPulse.update(audio, p, this.screen);
-    if (theme.effects.colorShift) this.colorShift.update(audio, p, this.screen);
+    if (!this.embedDesktop && theme.effects.pulse) this.beatPulse.update(audio, p, this.screen);
+    if (!this.embedDesktop && theme.effects.colorShift) this.colorShift.update(audio, p, this.screen);
     // 粒子常驻所有主题
     this.particles.update(audio, p, this.screen);
     if (theme.effects.borderGlow) this.borderGlow.update(audio, p, this.screen);
@@ -192,7 +201,7 @@ export class EffectComposer {
     this.renderer.setSize(this.screen.width, this.screen.height);
     this.renderer.setPixelRatio(this.screen.dpr);
     const tex = (this.bgMesh.material as THREE.MeshBasicMaterial).map;
-    if (tex) {
+    if (tex && !this.embedDesktop) {
       this.applyCoverFit(tex);
       this.beatPulse.setMesh(this.bgMesh);
     }
