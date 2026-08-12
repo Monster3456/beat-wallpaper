@@ -106,6 +106,9 @@ export class WaveformBars {
     this.time += 0.016;
     const beatBoost = audio.beat ? audio.beat_strength : 0;
 
+    // 待机睡眠波浪：静音时柱子缓慢游动（0.03~0.08），画面不静止、音乐来了无缝衔接
+    const idleWave = audio.volume < 0.05;
+
     // 呼吸灯：所有柱子整体循环变色（颜色丰富随时间变化）
     // 基础色由时间 + 低频推动，覆盖 0~1 全色环
     const globalHue = (this.time * 0.04 + audio.bass * 0.25) % 1.0;
@@ -113,12 +116,26 @@ export class WaveformBars {
     this.bars.forEach((bar, i) => {
       bar.visible = true;
 
-      const spectrumIdx = Math.floor((i / this.barCount) * audio.spectrum.length);
-      const value = audio.spectrum[spectrumIdx] ?? 0;
+      // 柱子取所属频谱区间的最大值（避免相邻柱子共享同一点）
+      const len = audio.spectrum.length;
+      const idx0 = Math.floor((i / this.barCount) * len);
+      const idx1 = Math.max(Math.floor(((i + 1) / this.barCount) * len), idx0 + 1);
+      let value = 0;
+      for (let s = idx0; s < idx1 && s < len; s++) {
+        if (audio.spectrum[s] > value) value = audio.spectrum[s];
+      }
 
-      const targetHeight = Math.max(value * 0.55, 0.03) * (1 + beatBoost * 0.2);
+      // Rust 已做每帧全局归一化 + 音量调制（灵敏度直接缩放音量，滑杆有体感）：
+      // 不再做逐柱 AGC——AGC 会把每根柱子都拉到满格，音量与灵敏度被抵消
+      const normValue = value;
+
+      const targetHeight = idleWave
+        ? 0.03 + 0.05 * (0.5 + 0.5 * Math.sin(this.time * 1.3 + i * 0.4))
+        : Math.max(normValue * 0.55, 0.03) * (1 + beatBoost * 0.2);
       const currentScale = bar.scale.y;
-      const smoothScale = currentScale + (targetHeight - currentScale) * 0.45;
+      // 差异化平滑：每根柱子系数不同 + 节拍时反应加快，打破"焊死"同步感
+      const smoothK = (0.3 + 0.22 * (0.5 + 0.5 * Math.sin(i * 1.7))) * (1 + beatBoost * 0.25);
+      const smoothScale = currentScale + (targetHeight - currentScale) * smoothK;
 
       bar.scale.y = smoothScale;
       bar.position.y = -0.92 + smoothScale / 2;

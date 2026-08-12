@@ -4,13 +4,11 @@ use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
 mod audio;
-mod depth;
 mod tray;
 mod wallpaper;
 
 /// 应用状态
 pub struct AppState {
-    pub depth_estimator: Mutex<depth::estimator::DepthEstimator>,
     pub current_wallpaper: Mutex<Option<PathBuf>>,
     pub is_video: Mutex<bool>,
     pub audio_enabled: Mutex<bool>,
@@ -72,12 +70,6 @@ async fn select_wallpaper(app: tauri::AppHandle) -> Result<String, String> {
             );
             *state.is_video.lock().unwrap() = is_video;
             *state.current_wallpaper.lock().unwrap() = Some(path_buf.clone());
-
-            // 如果是图片，生成深度图
-            if !is_video {
-                let estimator = state.depth_estimator.lock().unwrap();
-                let _ = estimator.estimate(&path_buf);
-            }
 
             // 发送事件到前端
             let _ = app.emit("wallpaper-changed", serde_json::json!({
@@ -143,22 +135,6 @@ fn get_current_wallpaper(app: tauri::AppHandle) -> Result<serde_json::Value, Str
     }
 }
 
-/// 获取深度图（Base64 编码的灰度图）
-#[tauri::command]
-fn get_depth_map(app: tauri::AppHandle) -> Result<Vec<f32>, String> {
-    let state = app.state::<AppState>();
-    let wallpaper_path = state.current_wallpaper.lock().unwrap().clone();
-
-    match wallpaper_path {
-        Some(path) => {
-            let estimator = state.depth_estimator.lock().unwrap();
-            let depth = estimator.estimate(&path).map_err(|e| e.to_string())?;
-            Ok(depth.data)
-        }
-        None => Err("未设置壁纸".to_string()),
-    }
-}
-
 /// 保存当前设置（保存后由 Rust 广播给所有窗口，保证所有屏幕同步）
 #[tauri::command]
 fn save_settings(app: tauri::AppHandle, settings: String) -> Result<(), String> {
@@ -173,6 +149,11 @@ fn save_settings(app: tauri::AppHandle, settings: String) -> Result<(), String> 
 
     // Rust 端广播给所有窗口（比前端 emit 可靠，所有屏幕同步切换）
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&settings) {
+        // 音频灵敏度写入分析器（滑杆有实际体感）
+        if let Some(sens) = parsed.get("audioSensitivity").and_then(|v| v.as_f64()) {
+            audio::capture::set_audio_sensitivity(sens as f32);
+        }
+
         let _ = app.emit("settings-updated", &parsed);
 
         // 直接向每个壁纸窗口注入 JS 应用主题（绕过 WebView 事件节流，保证副屏同步）
@@ -236,7 +217,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .manage(AppState {
-            depth_estimator: Mutex::new(depth::estimator::DepthEstimator::new()),
             current_wallpaper: Mutex::new(None),
             is_video: Mutex::new(false),
             audio_enabled: Mutex::new(true),
@@ -256,11 +236,6 @@ pub fn run() {
 
             // 创建系统托盘
             tray::create_tray(app.handle())?;
-
-            // 初始化深度估计模型
-            let state = app.state::<AppState>();
-            let mut estimator = state.depth_estimator.lock().unwrap();
-            let _ = estimator.init();
 
             // 启动音频捕获
             let _ = audio::capture::start_audio_capture();
@@ -412,7 +387,6 @@ pub fn run() {
             activate_wallpaper_mode,
             open_settings,
             log_frontend,
-            get_depth_map,
             save_settings,
             load_settings,
             get_builtin_wallpapers,

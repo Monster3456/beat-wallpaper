@@ -15,7 +15,6 @@ import {
   getCurrentWallpaper,
   activateWallpaperMode,
   selectWallpaper,
-  getDepthMap,
 } from './audioBridge';
 import type { AudioData, Theme, Settings } from './types';
 
@@ -42,14 +41,15 @@ function WallpaperApp() {
   const [currentTheme, setCurrentTheme] = useState<Theme>(getTheme('dreamscape'));
   const [wallpaperPath, setWallpaperPath] = useState<string | null>(null);
   const [isVideo, setIsVideo] = useState(false);
-  const [depthData, setDepthData] = useState<number[] | null>(null);
+  const [perfMode, setPerfMode] = useState<Settings['performanceMode']>('high');
 
-  // 加载设置（主题）
+  // 加载设置（主题 + 性能模式）
   useEffect(() => {
     loadSettings().then((saved) => {
       if (saved && Object.keys(saved).length > 1) {
         const merged = { ...getDefaultSettings(), ...saved } as Settings;
         setCurrentTheme(getTheme(merged.theme));
+        setPerfMode(merged.performanceMode);
       }
     });
   }, []);
@@ -60,6 +60,7 @@ function WallpaperApp() {
       const merged = { ...getDefaultSettings(), ...saved } as Settings;
       invoke('log_frontend', { msg: 'SETTINGS SYNC: theme=' + merged.theme }).catch(() => {});
       setCurrentTheme(getTheme(merged.theme));
+      setPerfMode(merged.performanceMode);
     });
     return () => {
       unlisten.then((fn) => fn());
@@ -95,18 +96,6 @@ function WallpaperApp() {
     };
   }, []);
 
-  // 获取深度图（AI 视差分层）
-  useEffect(() => {
-    if (!wallpaperPath || isVideo) return;
-    getDepthMap()
-      .then((data) => {
-        if (data && data.length > 0) {
-          setDepthData(data);
-        }
-      })
-      .catch(() => {});
-  }, [wallpaperPath, isVideo]);
-
   // 渲染就绪后切换到壁纸层
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -115,9 +104,9 @@ function WallpaperApp() {
     return () => clearTimeout(timer);
   }, []);
 
-  // 音频轮询（每 60fps）
+  // 音频轮询（30fps 足够驱动视觉平滑，降低 IPC 开销）
   useEffect(() => {
-    startAudioPolling((data) => setAudioData(data));
+    startAudioPolling((data) => setAudioData(data), 33);
     return () => stopAudioPolling(() => {});
   }, []);
 
@@ -138,16 +127,17 @@ function WallpaperApp() {
       currentTheme={currentTheme}
       wallpaperPath={wallpaperPath}
       isVideo={isVideo}
-      depthData={depthData}
+      performanceMode={perfMode}
     />
   );
 }
 
-/** 设置窗口：主题选择需确认后应用，变更实时广播给壁纸窗口 */
+/** 设置窗口：所有更改先暂存，统一「确认更改」后应用并广播给壁纸窗口 */
 function SettingsApp() {
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [settings, setSettings] = useState<Settings>(getDefaultSettings());
-  const [pendingThemeId, setPendingThemeId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Partial<Settings>>({});
+  const [level, setLevel] = useState(0);
 
   // 加载已保存的设置
   useEffect(() => {
@@ -167,52 +157,42 @@ function SettingsApp() {
     });
   }, []);
 
+  // 电平指示（设置窗口内实时音量条，10fps 足够）
+  useEffect(() => {
+    startAudioPolling((data) => setLevel(data.volume), 100);
+    return () => stopAudioPolling(() => {});
+  }, []);
+
   /** 应用设置：保存（Rust 端会自动广播给所有窗口） */
   const applySettings = useCallback((next: Settings) => {
     saveSettings(next);
     setSettings(next);
   }, []);
 
-  // 主题选择（暂存，等待确认）
-  const handleThemeSelect = useCallback((themeId: string) => {
-    setPendingThemeId(themeId);
+  /** 暂存更改 */
+  const stage = useCallback((patch: Partial<Settings>) => {
+    setDraft((d) => ({ ...d, ...patch }));
   }, []);
 
-  // 确认应用主题
-  const handleApplyTheme = useCallback(() => {
-    if (!pendingThemeId) return;
-    applySettings({ ...settings, theme: pendingThemeId });
-    setPendingThemeId(null);
-  }, [pendingThemeId, settings, applySettings]);
+  /** 统一确认：合并暂存并应用 */
+  const handleConfirm = useCallback(() => {
+    const next = { ...settings, ...draft } as Settings;
+    applySettings(next);
+    setDraft({});
+  }, [settings, draft, applySettings]);
 
-  // 选择壁纸（自定义壁纸）
+  // 选择壁纸（暂存，确认后生效）
   const handleSelectWallpaper = useCallback(async () => {
     const path = await selectWallpaper();
     if (path) {
-      const next = {
-        ...settings,
-        wallpaperPath: path,
-        isVideo: /\.(mp4|mov|webm)$/i.test(path),
-      };
-      applySettings(next);
+      stage({ wallpaperPath: path, isVideo: /\.(mp4|mov|webm)$/i.test(path) });
     }
-  }, [settings, applySettings]);
+  }, [stage]);
 
-  // 性能模式（即时生效）
-  const handlePerformanceModeChange = useCallback(
-    (mode: Settings['performanceMode']) => {
-      applySettings({ ...settings, performanceMode: mode });
-    },
-    [settings, applySettings],
-  );
-
-  // 音频灵敏度（即时生效）
-  const handleAudioSensitivityChange = useCallback(
-    (sensitivity: number) => {
-      applySettings({ ...settings, audioSensitivity: sensitivity });
-    },
-    [settings, applySettings],
-  );
+  // 视图 = 已应用 + 暂存
+  const view = { ...settings, ...draft } as Settings;
+  const dirty = Object.keys(draft).length > 0;
+  const pendingThemeId = draft.theme ?? null;
 
   // Onboarding 完成
   const handleOnboardingComplete = useCallback(
@@ -237,13 +217,15 @@ function SettingsApp() {
       overflowY: 'auto',
     }}>
       <SettingsPanel
-        settings={settings}
+        settings={view}
         pendingThemeId={pendingThemeId}
-        onThemeSelect={handleThemeSelect}
-        onApplyTheme={handleApplyTheme}
+        dirty={dirty}
+        level={level}
+        onThemeSelect={(id) => stage({ theme: id })}
+        onConfirm={handleConfirm}
         onWallpaperChange={handleSelectWallpaper}
-        onPerformanceModeChange={handlePerformanceModeChange}
-        onAudioSensitivityChange={handleAudioSensitivityChange}
+        onPerformanceModeChange={(mode) => stage({ performanceMode: mode })}
+        onAudioSensitivityChange={(sensitivity) => stage({ audioSensitivity: sensitivity })}
       />
     </div>
   );

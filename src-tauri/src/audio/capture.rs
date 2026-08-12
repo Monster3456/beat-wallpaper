@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -14,6 +14,14 @@ pub static LATEST_AUDIO: Lazy<Mutex<AudioFrame>> =
 
 static IS_RUNNING: AtomicBool = AtomicBool::new(false);
 
+/// 音频灵敏度（0~1，设置窗口写入；0.5 = 无增益）
+static AUDIO_SENSITIVITY: AtomicU32 = AtomicU32::new(500);
+
+pub fn set_audio_sensitivity(v: f32) {
+    let clamped = v.clamp(0.0, 1.0);
+    AUDIO_SENSITIVITY.store((clamped * 1000.0) as u32, Ordering::Relaxed);
+}
+
 // ============ FFT 分析器（跨平台共用） ============
 
 struct SpectrumAnalyzer {
@@ -21,6 +29,7 @@ struct SpectrumAnalyzer {
     window: Vec<f32>,
     buffer: Vec<Complex<f32>>,
     sample_rate: u32,
+    prev_spectrum: Vec<f32>,
 }
 
 impl SpectrumAnalyzer {
@@ -36,6 +45,7 @@ impl SpectrumAnalyzer {
             window,
             buffer: vec![Complex::new(0.0, 0.0); fft_size],
             sample_rate,
+            prev_spectrum: vec![0.0; 128],
         }
     }
 
@@ -52,8 +62,10 @@ impl SpectrumAnalyzer {
 
         let half = fft_size / 2;
         let mut spectrum = Vec::with_capacity(128);
-        let bins_per_band = half / 128;
 
+        // 逐 bin 幅度数组：mel 取样在 bin 间线性插值，避免取整共享同一个 band
+        // 导致相邻柱子数值完全一致、成组同步运动
+        let mut bin_mags = vec![0.0f32; half];
         let mut bass_energy = 0.0f32;
         let mut mid_energy = 0.0f32;
         let mut high_energy = 0.0f32;
@@ -62,9 +74,9 @@ impl SpectrumAnalyzer {
         let bass_cutoff = (250.0 * fft_size as f32 / self.sample_rate as f32) as usize;
         let mid_cutoff = (2000.0 * fft_size as f32 / self.sample_rate as f32) as usize;
 
-        let mut band_energies = vec![0.0f32; 128];
         for i in 0..half {
             let magnitude = self.buffer[i].norm();
+            bin_mags[i] = magnitude;
             total_energy += magnitude;
 
             if i < bass_cutoff {
@@ -74,20 +86,19 @@ impl SpectrumAnalyzer {
             } else {
                 high_energy += magnitude;
             }
-
-            let band = (i / bins_per_band).min(127);
-            band_energies[band] += magnitude;
         }
 
         // RMS 音量（基于原始样本，不受 FFT 增益影响）
+        // 灵敏度 0~1 → 0.5~1.5 倍增益，滑杆有实际体感
         let sum_sq: f32 = samples
             .iter()
             .take(fft_size.min(samples.len()))
             .map(|s| s * s)
             .sum();
         let rms = (sum_sq / fft_size as f32).sqrt();
+        let sens = AUDIO_SENSITIVITY.load(Ordering::Relaxed) as f32 / 1000.0;
         // 经验增益：RMS 0.25 ≈ 音量 1.0
-        let volume = (rms * 4.0).min(1.0);
+        let volume = (rms * 4.0 * (0.5 + sens)).min(1.0);
 
         // 频段相对占比（0~1）
         let eps = 1e-6;
@@ -101,24 +112,47 @@ impl SpectrumAnalyzer {
         let mid = (mid_ratio * volume * 1.6).min(1.0);
         let high = (high_ratio * volume * 1.4).min(1.0);
 
-        // mel 频率映射 + 对数幅度压缩：
-        // 1) mel 曲线平滑分布频率（不会出现前段柱子取自同一 FFT bin 导致完全一致）
-        // 2) 对数压缩幅度，避免低频能量饱和到 1.0
-        let max_band_energy = band_energies.iter().cloned().fold(0.0f32, f32::max).max(eps);
-        let log_max = (1.0 + max_band_energy).ln();
+        // mel 采样 + bin 窗口均值 + 线性插值 + 对数压缩 + 高频截断：
+        // 1) 每点取 ±1 bin 窗口均值，抑制单 bin 噪声尖峰（单 bin 采样会让柱子乱跳）
+        // 2) 插值保证相邻采样值不同，柱子不再成组完全一致
+        // 3) 截断到 12kHz（之上音乐几乎没有能量，保留只会产生纹丝不动的死柱）
+        // 4) 非对称时间平滑：起音快（保节奏打击感）、回落慢（消帧间抖动）
         let sample_rate = self.sample_rate as f32;
         let fft_size_f = fft_size as f32;
-        let max_mel = 2595.0 * (1.0 + sample_rate / 2.0 / 700.0).log10();
+        let max_hz = 12000.0f32.min(sample_rate * 0.5);
+        let max_mel = 2595.0 * (1.0 + max_hz / 700.0).log10();
+        let gated_volume = if volume < 0.03 { 0.0 } else { volume };
+
+        let mut samples = vec![0.0f32; 128];
+        let mut max_sample = 0.0f32;
         for b in 0..128 {
-            // mel 频率 → Hz → FFT bin
+            // mel 频率 → Hz → 浮点 FFT bin
             let target_mel = max_mel * b as f32 / 127.0;
             let hz = 700.0 * (10f32.powf(target_mel / 2595.0) - 1.0);
-            let bin = (hz / sample_rate * fft_size_f) as usize;
-            let band = (bin / bins_per_band).min(127);
-            let e = band_energies[band];
-            // 对数压缩 + 音量调制
+            let bin_f = hz / sample_rate * fft_size_f;
+            let i0 = (bin_f.floor() as usize).min(half - 1);
+            let i1 = (i0 + 1).min(half - 1);
+            let frac = bin_f - bin_f.floor();
+            // 窗口均值（±1 bin）后插值，削弱单 bin 噪声
+            let w0 = bin_mags[i0.saturating_sub(1)] + bin_mags[i0] + bin_mags[(i0 + 1).min(half - 1)];
+            let w1 = bin_mags[i1.saturating_sub(1)] + bin_mags[i1] + bin_mags[(i1 + 1).min(half - 1)];
+            let e = (w0 / 3.0) * (1.0 - frac) + (w1 / 3.0) * frac;
+            // 对数压缩，避免低频能量饱和
             let log_e = (1.0 + e).ln();
-            spectrum.push(((log_e / log_max) * volume).min(1.0));
+            samples[b] = log_e;
+            if log_e > max_sample {
+                max_sample = log_e;
+            }
+        }
+        let log_max = max_sample.max(1e-6);
+        for b in 0..128 {
+            let target = ((samples[b] / log_max) * gated_volume).min(1.0);
+            // 起音 0.45 / 回落 0.12：打击感保留，抖动被抹平
+            let prev = self.prev_spectrum[b];
+            let alpha = if target > prev { 0.45 } else { 0.12 };
+            let smoothed = prev + (target - prev) * alpha;
+            self.prev_spectrum[b] = smoothed;
+            spectrum.push(smoothed);
         }
 
         AudioFrame {
@@ -215,7 +249,7 @@ pub extern "C" fn on_audio_pcm_data(ptr: *const f32, len: i32) {
     }
 }
 
-/// FFT 分析线程：每 ~16ms 从缓冲取 2048 样本做频谱分析
+/// FFT 分析线程：每 ~33ms 从缓冲取 2048 样本做频谱分析（30fps 足够，降低 CPU 占用）
 fn fft_loop() {
     std::thread::Builder::new()
         .name("fft-analysis".into())
@@ -223,10 +257,10 @@ fn fft_loop() {
             let mut pending = vec![0.0f32; FFT_SIZE];
             let mut fft_counter: u32 = 0;
             loop {
-                std::thread::sleep(Duration::from_millis(16));
+                std::thread::sleep(Duration::from_millis(33));
 
                 let mut buf = PCM_BUFFER.lock();
-                if buf.data.len() >= FFT_SIZE && buf.last_fft.elapsed() > Duration::from_millis(12) {
+                if buf.data.len() >= FFT_SIZE && buf.last_fft.elapsed() > Duration::from_millis(30) {
                     pending.copy_from_slice(&buf.data[..FFT_SIZE]);
                     // 滑动窗口前进一半
                     buf.data.drain(..FFT_SIZE / 2);

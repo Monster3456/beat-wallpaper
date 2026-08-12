@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["wallpaper", "settings"],
+  "windows": ["wallpaper", "wallpaper_*", "settings"],
   "permissions": [
     "core:default",
     "core:event:default",

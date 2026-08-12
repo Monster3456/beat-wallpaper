@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { EffectComposer } from '../effects/EffectComposer';
-import type { AudioData, Theme } from '../types';
+import type { AudioData, Settings, Theme } from '../types';
 import { getBuiltinWallpapers } from '../audioBridge';
 import * as THREE from 'three';
 
@@ -10,10 +10,16 @@ interface Props {
   currentTheme: Theme | null;
   wallpaperPath: string | null;
   isVideo: boolean;
-  depthData: number[] | null;
+  performanceMode: Settings['performanceMode'];
 }
 
-export function WallpaperCanvas({ audioData, currentTheme, wallpaperPath, isVideo, depthData }: Props) {
+export function WallpaperCanvas({
+  audioData,
+  currentTheme,
+  wallpaperPath,
+  isVideo,
+  performanceMode,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<EffectComposer | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -61,19 +67,17 @@ export function WallpaperCanvas({ audioData, currentTheme, wallpaperPath, isVide
     }
   }, [wallpaperPath, isVideo]);
 
-  // 深度图
-  useEffect(() => {
-    if (depthData && composerRef.current) {
-      composerRef.current.setDepthMap(depthData);
-    }
-  }, [depthData]);
-
   // 应用主题
   useEffect(() => {
     if (currentTheme && composerRef.current) {
       composerRef.current.applyTheme(currentTheme);
     }
   }, [currentTheme]);
+
+  // 性能模式（像素比上限 + 粒子上限）
+  useEffect(() => {
+    composerRef.current?.setPerformanceMode(performanceMode);
+  }, [performanceMode]);
 
   // 更新效果（每秒 60 帧）
   const updateLoop = useCallback(() => {

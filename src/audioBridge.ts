@@ -42,11 +42,6 @@ export async function getCurrentWallpaper(): Promise<{ path: string | null; isVi
   return invoke('get_current_wallpaper');
 }
 
-/** 获取深度图数据 */
-export async function getDepthMap(): Promise<number[]> {
-  return invoke<number[]>('get_depth_map');
-}
-
 /** 保存设置 */
 export async function saveSettings(settings: object): Promise<void> {
   await invoke('save_settings', { settings: JSON.stringify(settings) });
@@ -74,8 +69,8 @@ export function onWallpaperChanged(cb: (path: string, isVideo: boolean) => void)
   });
 }
 
-/** 开始轮询音频数据 */
-export function startAudioPolling(cb: (data: AudioData) => void) {
+/** 开始轮询音频数据（intervalMs：毫秒间隔，壁纸窗口 33ms，设置窗口 100ms） */
+export function startAudioPolling(cb: (data: AudioData) => void, intervalMs: number = 16) {
   listeners.push(cb);
   if (!polling) {
     polling = true;
@@ -94,7 +89,7 @@ export function startAudioPolling(cb: (data: AudioData) => void) {
           invoke('log_frontend', { msg: 'POLL ERROR #' + pollCount + ': ' + String(e) }).catch(() => {});
         }
       }
-    }, 1000 / 60); // 60fps
+    }, intervalMs); // 默认 60fps，可按窗口需求降频
   }
 }
 

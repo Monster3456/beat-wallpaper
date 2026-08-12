@@ -14,6 +14,8 @@ export interface Theme {
   id: string;
   name: string;
   description: string;
+  /** 主题主色（光晕/粒子/招牌效果共用的色彩骨架） */
+  accentColor: string;
   effects: {
     pulse: boolean;
     colorShift: boolean;
@@ -40,6 +42,17 @@ export interface ThemeParams {
   brightness: number;         // 壁纸亮度 (0-2)
   saturation: number;         // 色彩饱和度 (0-2)
   warmth: number;             // 色温暖度 (0.5-1.5)
+  haloIntensity: number;      // 背景光晕强度 (0-1)
+  vignetteAmount: number;     // 暗角强度 (0-1)
+  flashAmount: number;        // 节拍闪光强度 (0-1)
+  haloTop: number;            // 顶部幕帘光晕占比 (0-1，极光用)
+  haloFlicker: number;        // 光晕火焰闪烁强度 (0-1，烈焰用)
+  particleRise: number;       // 粒子上升浮力 (0-1，烈焰火星/深海气泡)
+  particleShape: 'dot' | 'snow' | 'heart' | 'flame' | 'bubble'; // 粒子形态
+  signatureMode: 'none' | 'aurora' | 'neon' | 'wave'; // 招牌效果
+  signatureAmount: number;    // 招牌效果强度 (0-1)
+  particleEnabled: boolean;   // 无粒子主题的基础粒子（8bit 关闭）
+  tintAmount: number;         // 壁纸色调滤镜强度 (0-0.25，勿过强)
 }
 
 /** 应用设置 */

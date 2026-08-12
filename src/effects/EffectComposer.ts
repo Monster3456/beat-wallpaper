@@ -1,11 +1,12 @@
 import type { AudioData, Theme, ThemeParams, ScreenInfo } from '../types';
 import { BeatPulse } from './BeatPulse';
 import { ColorShift } from './ColorShift';
-import { ParallaxDepth } from './ParallaxDepth';
 import { Particles } from './Particles';
 import { BorderGlow } from './BorderGlow';
 import { WaveformBars } from './WaveformBars';
 import { Pixel8Bit } from './Pixel8Bit';
+import { AtmosphereLayer } from './AtmosphereLayer';
+import { SignatureLayer } from './SignatureLayer';
 import * as THREE from 'three';
 
 /**
@@ -17,15 +18,17 @@ export class EffectComposer {
   private camera: THREE.OrthographicCamera;
   private bgMesh: THREE.Mesh;
   private screen: ScreenInfo;
+  private perfCap: number = 1.5;
   private currentTheme: Theme | null = null;
 
   private beatPulse: BeatPulse;
   private colorShift: ColorShift;
-  private parallaxDepth: ParallaxDepth;
   private particles: Particles;
   private borderGlow: BorderGlow;
   private waveformBars: WaveformBars;
   private pixel8Bit: Pixel8Bit;
+  private atmosphere: AtmosphereLayer;
+  private signature: SignatureLayer;
 
   constructor(container: HTMLElement) {
     this.screen = {
@@ -61,15 +64,24 @@ export class EffectComposer {
     this.colorShift = new ColorShift(
       (this.bgMesh.material as THREE.MeshBasicMaterial).map as unknown as THREE.Texture,
     );
-    this.parallaxDepth = new ParallaxDepth(this.scene);
     this.particles = new Particles(this.scene);
     this.borderGlow = new BorderGlow(this.scene);
     this.waveformBars = new WaveformBars();
     this.pixel8Bit = new Pixel8Bit();
+    this.atmosphere = new AtmosphereLayer();
+    this.signature = new SignatureLayer();
     // this.lightFlow = new LightFlow(); 已移除（用户反馈不够美观）
 
     window.addEventListener('resize', () => this.onResize());
     this.animate();
+  }
+
+  /** 性能模式：像素比上限 + 粒子上限 */
+  setPerformanceMode(mode: 'high' | 'balanced' | 'energy') {
+    this.perfCap = mode === 'high' ? 1.5 : mode === 'balanced' ? 1.25 : 1.0;
+    this.screen.dpr = Math.min(window.devicePixelRatio, this.perfCap);
+    this.renderer.setPixelRatio(this.screen.dpr);
+    this.particles.setMaxParticles(mode === 'high' ? 350 : mode === 'balanced' ? 220 : 140);
   }
 
   setTexture(texture: THREE.Texture) {
@@ -105,22 +117,31 @@ export class EffectComposer {
     this.bgMesh.scale.set(scaleX, scaleY, 1);
   }
 
-  setDepthMap(_depthData: number[]) {
-    // 深度视差已移除（build 网格会破坏壁纸显示）
-  }
-
   applyTheme(theme: Theme) {
     this.currentTheme = theme;
-    // 粒子常驻：无粒子主题也保留 60 个基础粒子
-    const baseCount = theme.effects.particles ? 0 : 60;
+
+    // 主题主色 → 粒子锚定色相 + 上升浮力 + 形态 + 氛围层光晕颜色
+    // 必须先于 setCount：环境形态/点燃逻辑依赖 shape 与 rise
+    const accent = new THREE.Color(theme.accentColor);
+    const hsl = { h: 0, s: 0, l: 0 };
+    accent.getHSL(hsl);
+    this.particles.setAccentHue(hsl.h);
+    this.particles.setRise(theme.params.particleRise);
+    this.particles.setShape(theme.params.particleShape);
+    this.atmosphere.setAccentColor(theme.accentColor);
+    this.signature.setSignature(
+      theme.params.signatureMode,
+      theme.params.signatureAmount,
+      theme.accentColor,
+    );
+
+    // 粒子常驻：无粒子主题保留 60 个基础粒子（8bit 等明确关闭的除外）
+    const baseCount = theme.effects.particles ? 0 : theme.params.particleEnabled === false ? 0 : 60;
     this.particles.setCount(Math.max(theme.params.particleCount, baseCount));
 
     // 切换主题时重置效果状态，防止旧主题效果残留叠加（马赛克问题）
     this.pixel8Bit.setEnabled(theme.effects.pixel8bit);
     this.waveformBars.setEnabled(true); // 音波条常驻所有主题
-    if (!theme.effects.parallax) {
-      this.parallaxDepth.clear();
-    }
   }
 
   updateEffects(audio: AudioData, theme: Theme) {
@@ -135,6 +156,10 @@ export class EffectComposer {
     if (theme.effects.borderGlow) this.borderGlow.update(audio, p, this.screen);
     // 音波条常驻：始终更新（透明度由主题参数控制）
     this.waveformBars.update(audio, p, this.screen);
+    // 氛围层：光晕 + 闪光 + 暗角
+    this.atmosphere.update(audio, p);
+    // 招牌效果：极光幕帘 / 霓虹网格
+    this.signature.update(audio, p);
     // 光影流动已移除
     // this.lightFlow.update(audio, p);
     if (theme.effects.pixel8bit) this.pixel8Bit.update(audio, p, this.screen);
@@ -148,8 +173,13 @@ export class EffectComposer {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
-    // 前景层：音波条
-    // this.lightFlow.render(this.renderer); 已移除
+    // 前景层：氛围光晕 → 招牌效果 → 音波条
+    if (this.atmosphere.isVisible()) {
+      this.atmosphere.render(this.renderer);
+    }
+    if (this.signature.isVisible()) {
+      this.signature.render(this.renderer);
+    }
     if (this.waveformBars.isVisible()) {
       this.waveformBars.render(this.renderer);
     }
@@ -158,7 +188,7 @@ export class EffectComposer {
   private onResize() {
     this.screen.width = window.innerWidth;
     this.screen.height = window.innerHeight;
-    this.screen.dpr = Math.min(window.devicePixelRatio, 1.5);
+    this.screen.dpr = Math.min(window.devicePixelRatio, this.perfCap);
     this.renderer.setSize(this.screen.width, this.screen.height);
     this.renderer.setPixelRatio(this.screen.dpr);
     const tex = (this.bgMesh.material as THREE.MeshBasicMaterial).map;
