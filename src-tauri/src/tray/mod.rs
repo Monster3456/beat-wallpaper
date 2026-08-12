@@ -1,7 +1,7 @@
 /// 系统托盘管理
 
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 /// 创建系统托盘
 pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
@@ -15,11 +15,8 @@ pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                     button_state: MouseButtonState::Up,
                     ..
                 } => {
-                    // 左键单击：打开设置窗口
-                    if let Some(window) = tray.app_handle().get_webview_window("settings") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+                    // 左键单击：打开设置窗口（懒创建，关闭即销毁）
+                    crate::open_settings_window(tray.app_handle());
                 }
                 TrayIconEvent::Click {
                     button: MouseButton::Right,

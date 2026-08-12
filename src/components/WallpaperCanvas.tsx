@@ -11,6 +11,8 @@ interface Props {
   wallpaperPath: string | null;
   isVideo: boolean;
   performanceMode: Settings['performanceMode'];
+  /** macOS 嵌入桌面模式：只叠加效果，不渲染壁纸图像 */
+  embedDesktop: boolean;
 }
 
 export function WallpaperCanvas({
@@ -19,6 +21,7 @@ export function WallpaperCanvas({
   wallpaperPath,
   isVideo,
   performanceMode,
+  embedDesktop,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<EffectComposer | null>(null);
@@ -37,9 +40,9 @@ export function WallpaperCanvas({
     };
   }, []);
 
-  // 加载壁纸
+  // 加载壁纸（嵌入桌面模式不渲染壁纸图像，系统桌面透出）
   useEffect(() => {
-    if (!composerRef.current) return;
+    if (!composerRef.current || embedDesktop) return;
 
     if (isVideo && wallpaperPath) {
       // 视频壁纸
@@ -65,7 +68,12 @@ export function WallpaperCanvas({
         }
       });
     }
-  }, [wallpaperPath, isVideo]);
+  }, [wallpaperPath, isVideo, embedDesktop]);
+
+  // 嵌入桌面模式（macOS）：隐藏壁纸图像层，只叠加效果
+  useEffect(() => {
+    composerRef.current?.setEmbedDesktop(embedDesktop);
+  }, [embedDesktop]);
 
   // 应用主题
   useEffect(() => {

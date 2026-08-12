@@ -38,7 +38,11 @@ export async function activateWallpaperMode(): Promise<void> {
 }
 
 /** 获取当前壁纸文件 */
-export async function getCurrentWallpaper(): Promise<{ path: string | null; isVideo: boolean }> {
+export async function getCurrentWallpaper(): Promise<{
+  path: string | null;
+  isVideo: boolean;
+  desktopEmbed: boolean;
+}> {
   return invoke('get_current_wallpaper');
 }
 

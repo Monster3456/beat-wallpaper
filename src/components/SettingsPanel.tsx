@@ -12,6 +12,8 @@ interface Props {
   dirty: boolean;
   /** 实时音频电平 0-1（电平指示） */
   level: number;
+  /** macOS 嵌入桌面模式：效果叠加在系统桌面之上 */
+  desktopEmbed: boolean;
   onThemeSelect: (themeId: string) => void;
   onConfirm: () => void;
   onWallpaperChange: () => void;
@@ -24,6 +26,7 @@ export function SettingsPanel({
   pendingThemeId,
   dirty,
   level,
+  desktopEmbed,
   onThemeSelect,
   onConfirm,
   onWallpaperChange,
@@ -62,13 +65,21 @@ export function SettingsPanel({
 
       {/* 壁纸 */}
       <Section title="壁纸">
-        <button onClick={handleSelectWallpaper} style={btnStyle}>
-          选择壁纸
-        </button>
-        {settings.wallpaperPath && (
-          <p style={{ fontSize: 12, opacity: 0.5, margin: '6px 0 0', wordBreak: 'break-all' }}>
-            {settings.wallpaperPath}
+        {desktopEmbed ? (
+          <p style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.6 }}>
+            macOS 嵌入桌面模式：效果直接叠加在系统壁纸之上，桌面图标、小组件与 Dock 均不受影响。更换壁纸请在「系统设置 → 壁纸」中修改，应用自动跟随。
           </p>
+        ) : (
+          <>
+            <button onClick={handleSelectWallpaper} style={btnStyle}>
+              选择壁纸
+            </button>
+            {settings.wallpaperPath && (
+              <p style={{ fontSize: 12, opacity: 0.5, margin: '6px 0 0', wordBreak: 'break-all' }}>
+                {settings.wallpaperPath}
+              </p>
+            )}
+          </>
         )}
       </Section>
 

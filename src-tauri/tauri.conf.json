@@ -11,20 +11,7 @@
   },
   "app": {
     "macOSPrivateApi": true,
-    "windows": [
-      {
-        "label": "settings",
-        "title": "BeatWallpaper 设置",
-        "width": 640,
-        "height": 720,
-        "decorations": true,
-        "transparent": false,
-        "visible": false,
-        "resizable": true,
-        "shadow": true,
-        "skipTaskbar": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null,
       "assetProtocol": {

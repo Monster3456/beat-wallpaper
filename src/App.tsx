@@ -42,6 +42,7 @@ function WallpaperApp() {
   const [wallpaperPath, setWallpaperPath] = useState<string | null>(null);
   const [isVideo, setIsVideo] = useState(false);
   const [perfMode, setPerfMode] = useState<Settings['performanceMode']>('high');
+  const [embedDesktop, setEmbedDesktop] = useState(false);
 
   // 加载设置（主题 + 性能模式）
   useEffect(() => {
@@ -81,6 +82,7 @@ function WallpaperApp() {
   // 获取当前系统壁纸并跟随变化
   useEffect(() => {
     getCurrentWallpaper().then((wp) => {
+      setEmbedDesktop(!!wp.desktopEmbed);
       if (wp.path) {
         setWallpaperPath(wp.path);
         setIsVideo(wp.isVideo);
@@ -128,6 +130,7 @@ function WallpaperApp() {
       wallpaperPath={wallpaperPath}
       isVideo={isVideo}
       performanceMode={perfMode}
+      embedDesktop={embedDesktop}
     />
   );
 }
@@ -138,6 +141,7 @@ function SettingsApp() {
   const [settings, setSettings] = useState<Settings>(getDefaultSettings());
   const [draft, setDraft] = useState<Partial<Settings>>({});
   const [level, setLevel] = useState(0);
+  const [embedDesktop, setEmbedDesktop] = useState(false);
 
   // 加载已保存的设置
   useEffect(() => {
@@ -151,6 +155,7 @@ function SettingsApp() {
 
     // 显示当前系统壁纸路径
     getCurrentWallpaper().then((wp) => {
+      setEmbedDesktop(!!wp.desktopEmbed);
       if (wp.path) {
         setSettings((prev) => ({ ...prev, wallpaperPath: wp.path, isVideo: wp.isVideo }));
       }
@@ -221,6 +226,7 @@ function SettingsApp() {
         pendingThemeId={pendingThemeId}
         dirty={dirty}
         level={level}
+        desktopEmbed={embedDesktop}
         onThemeSelect={(id) => stage({ theme: id })}
         onConfirm={handleConfirm}
         onWallpaperChange={handleSelectWallpaper}

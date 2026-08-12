@@ -102,14 +102,35 @@ fn activate_wallpaper_mode(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 打开设置窗口（不存在则创建，关闭即销毁——不常驻 WebView，省内存）
+pub fn open_settings_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(win) = app.get_webview_window("settings") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+    let result = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("index.html".into()))
+        .title("BeatWallpaper 设置")
+        .inner_size(640.0, 720.0)
+        .resizable(true)
+        .shadow(true)
+        .skip_taskbar(false)
+        .build();
+    match result {
+        Ok(win) => {
+            let _ = win.show();
+            let _ = win.set_focus();
+            log::info!("设置窗口已创建（懒加载）");
+        }
+        Err(e) => log::error!("创建设置窗口失败: {}", e),
+    }
+}
+
 /// 打开设置窗口（托盘点击调用）
 #[tauri::command]
 fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(settings_win) = app.get_webview_window("settings") {
-        let _ = settings_win.show();
-        let _ = settings_win.set_focus();
-        log::info!("打开设置窗口");
-    }
+    open_settings_window(&app);
     Ok(())
 }
 
@@ -120,19 +141,18 @@ fn log_frontend(msg: String) {
 }
 
 /// 获取当前壁纸路径（前端启动时调用，弥补事件早于前端加载的问题）
+/// macOS 返回 desktopEmbed=true：应用只叠加效果在系统桌面之上，不渲染壁纸图像
 #[tauri::command]
 fn get_current_wallpaper(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let state = app.state::<AppState>();
     let path = state.current_wallpaper.lock().unwrap().clone();
     let is_video = *state.is_video.lock().unwrap();
 
-    match path {
-        Some(p) => Ok(serde_json::json!({
-            "path": p.to_string_lossy().to_string(),
-            "isVideo": is_video
-        })),
-        None => Ok(serde_json::json!({ "path": null, "isVideo": false })),
-    }
+    Ok(serde_json::json!({
+        "path": path.map(|p| p.to_string_lossy().to_string()),
+        "isVideo": is_video,
+        "desktopEmbed": cfg!(target_os = "macos"),
+    }))
 }
 
 /// 保存当前设置（保存后由 Rust 广播给所有窗口，保证所有屏幕同步）
@@ -221,15 +241,6 @@ pub fn run() {
             is_video: Mutex::new(false),
             audio_enabled: Mutex::new(true),
         })
-        .on_window_event(|window, event| {
-            // 设置窗口关闭时隐藏而非销毁（保证 Dock 点击可再次打开）
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "settings" {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
-            }
-        })
         .setup(|app| {
             // 初始化日志
             env_logger::init();
@@ -305,7 +316,8 @@ pub fn run() {
                     )
                     .title("BeatWallpaper")
                     .decorations(false)
-                    .transparent(false)
+                    // macOS：透明窗口叠加在系统桌面之上（图标/小组件/Dock 不被遮挡）
+                    .transparent(cfg!(target_os = "macos"))
                     .visible(false)
                     .resizable(false)
                     .focusable(false)
@@ -369,10 +381,7 @@ pub fn run() {
                 .map(|d| !d.join("settings.json").exists())
                 .unwrap_or(true);
             if is_first_launch {
-                if let Some(settings_win) = app.get_webview_window("settings") {
-                    let _ = settings_win.show();
-                    let _ = settings_win.set_focus();
-                }
+                open_settings_window(app.handle());
                 log::info!("首次启动，打开设置窗口");
             }
 
@@ -394,24 +403,11 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("构建 BeatWallpaper 失败")
         .run(|app_handle, event| {
-            // macOS: 点击 Dock 图标时打开设置窗口
+            // macOS: 点击 Dock 图标时打开设置窗口（懒创建）
             match event {
                 tauri::RunEvent::Reopen { .. } => {
                     log::info!("Dock 图标点击 (Reopen)");
-                    match app_handle.get_webview_window("settings") {
-                        Some(w) => {
-                            let show_ok = w.show().is_ok();
-                            let focus_ok = w.set_focus().is_ok();
-                            let visible = w.is_visible().unwrap_or(false);
-                            log::info!(
-                                "settings 窗口: show={} focus={} visible={}",
-                                show_ok,
-                                focus_ok,
-                                visible
-                            );
-                        }
-                        None => log::warn!("settings 窗口不存在！"),
-                    }
+                    open_settings_window(app_handle);
                 }
                 tauri::RunEvent::ExitRequested { .. } => {}
                 _ => {}
