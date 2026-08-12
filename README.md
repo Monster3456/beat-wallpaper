@@ -68,3 +68,13 @@ src-tauri/
 
 - macOS 上壁纸渲染在系统桌面层（`CGWindowLevelForKey(desktop)`），独立于系统自带壁纸
 - 演示图片为效果概念渲染图，实际效果以运行应用为准
+
+## 📥 下载
+
+**v0.1.0（macOS ARM64）**
+
+[⬇ BeatWallpaper_0.1.0_aarch64.dmg](https://github.com/Monster3456/beat-wallpaper/releases/download/v0.1.0/BeatWallpaper_0.1.0_aarch64.dmg)
+
+> 首次打开 `.app` 若提示"未识别的开发者"，前往 **系统设置 → 隐私与安全性**，点击"仍要打开"即可。
+>
+> **Windows 版本说明**：Windows 壁纸嵌入层尚未完善（`setup_wallpaper_window` 为存根），应用可以运行但窗口不会嵌入桌面图标下方。Windows 打包需 Windows 开发环境，欢迎 PR 或在 Issues 中反馈需求。
