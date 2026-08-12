@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>BeatWallpaper 需要访问系统音频输出，用于分析音乐节奏驱动壁纸律动</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>BeatWallpaper 需要屏幕录制权限以捕获系统音频输出</string>
+    <key>CFBundleName</key>
+    <string>BeatWallpaper</string>
+    <key>CFBundleDisplayName</key>
+    <string>BeatWallpaper</string>
+</dict>
+</plist>

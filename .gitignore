@@ -1,0 +1,16 @@
+# Node
+node_modules/
+dist/
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# 生成的图片资源
+vibe_images/
+
+# macOS
+.DS_Store
+
+# 日志
+*.log
