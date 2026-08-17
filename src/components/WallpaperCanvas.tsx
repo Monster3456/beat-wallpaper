@@ -40,9 +40,9 @@ export function WallpaperCanvas({
     };
   }, []);
 
-  // 加载壁纸（嵌入桌面模式不渲染壁纸图像，系统桌面透出）
+  // 加载壁纸（嵌入桌面模式也加载：8bit 主题需要像素化壁纸图像）
   useEffect(() => {
-    if (!composerRef.current || embedDesktop) return;
+    if (!composerRef.current) return;
 
     if (isVideo && wallpaperPath) {
       // 视频壁纸
@@ -68,7 +68,7 @@ export function WallpaperCanvas({
         }
       });
     }
-  }, [wallpaperPath, isVideo, embedDesktop]);
+  }, [wallpaperPath, isVideo]);
 
   // 嵌入桌面模式（macOS）：隐藏壁纸图像层，只叠加效果
   useEffect(() => {

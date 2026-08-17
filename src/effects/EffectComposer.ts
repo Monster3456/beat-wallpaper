@@ -78,10 +78,10 @@ export class EffectComposer {
     this.animate();
   }
 
-  /** 切换嵌入桌面模式：隐藏壁纸图像层，只保留效果叠加 */
+  /** 切换嵌入桌面模式：默认隐藏壁纸图像层；8bit 主题例外（需像素化壁纸） */
   setEmbedDesktop(flag: boolean) {
     this.embedDesktop = flag;
-    this.bgMesh.visible = !flag;
+    this.bgMesh.visible = !flag || (this.currentTheme?.effects.pixel8bit ?? false);
   }
 
   /** 性能模式：像素比上限 + 粒子上限 */
@@ -93,7 +93,7 @@ export class EffectComposer {
   }
 
   setTexture(texture: THREE.Texture) {
-    if (this.embedDesktop) return; // 嵌入模式不渲染壁纸图像
+    // 嵌入模式也保存壁纸纹理：8bit 主题需要像素化壁纸图像
     // 只替换材质，不能 remove mesh（否则网格移出场景导致空白）
     const newMat = new THREE.MeshBasicMaterial({ map: texture });
     (this.bgMesh.material as THREE.Material).dispose();
@@ -150,6 +150,8 @@ export class EffectComposer {
 
     // 切换主题时重置效果状态，防止旧主题效果残留叠加（马赛克问题）
     this.pixel8Bit.setEnabled(theme.effects.pixel8bit);
+    // 嵌入模式下默认隐藏壁纸图像层，但 8bit 主题需要显示它来做像素化
+    this.bgMesh.visible = !this.embedDesktop || theme.effects.pixel8bit;
     this.waveformBars.setEnabled(true); // 音波条常驻所有主题
   }
 
