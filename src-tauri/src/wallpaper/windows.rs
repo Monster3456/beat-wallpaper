@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 // 仅 Windows 可用的类型（函数签名需要模块级导入）
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
 
 /// 在 Windows 上将窗口嵌入桌面壁纸层（Progman/WorkerW 技法）：
 /// 把窗口设为壁纸 WorkerW 的子窗口——壁纸图片之上、桌面图标（SHELLDLL_DefView）之下，
@@ -15,7 +15,7 @@ pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
     {
         use windows::core::w;
         use windows::Win32::UI::WindowsAndMessaging::{
-            EnumWindows, FindWindowExW, FindWindowW, GetWindowLongPtrW, SendMessageW, SetParent,
+            EnumWindows, FindWindowW, GetWindowLongPtrW, SendMessageW, SetParent,
             SetWindowLongPtrW, GWL_STYLE, WS_CHILD, WS_POPUP,
         };
 
