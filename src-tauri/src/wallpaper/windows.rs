@@ -92,9 +92,8 @@ unsafe extern "system" fn find_wallpaper_worker(hwnd: HWND, lparam: LPARAM) -> B
 #[cfg(target_os = "windows")]
 pub fn get_system_wallpaper_path() -> Result<String> {
     use windows::Win32::UI::WindowsAndMessaging::{
-        SystemParametersInfoW, SPI_GETDESKWALLPAPER,
+        SystemParametersInfoW, SPI_GETDESKWALLPAPER, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
     };
-    use windows::Win32::Foundation::FALSE;
 
     unsafe {
         let mut buf = [0u16; 260];
@@ -102,9 +101,9 @@ pub fn get_system_wallpaper_path() -> Result<String> {
             SPI_GETDESKWALLPAPER,
             0,
             Some(buf.as_mut_ptr() as *mut core::ffi::c_void),
-            0,
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
         );
-        if result == FALSE {
+        if result.is_err() {
             anyhow::bail!("获取系统壁纸路径失败");
         }
         let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
