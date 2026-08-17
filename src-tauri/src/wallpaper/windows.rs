@@ -3,59 +3,70 @@ use tauri::WebviewWindow;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+// 仅 Windows 可用的类型（函数签名需要模块级导入）
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+
 /// 在 Windows 上将窗口嵌入桌面壁纸层（Progman/WorkerW 技法）：
 /// 把窗口设为壁纸 WorkerW 的子窗口——壁纸图片之上、桌面图标（SHELLDLL_DefView）之下，
 /// 与 macOS 嵌入效果一致，不会遮挡任何窗口
 pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
-    use windows::core::w;
-    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, FindWindowExW, FindWindowW, GetWindowLongPtrW, SendMessageW, SetParent,
-        SetWindowLongPtrW, GWL_STYLE, WS_CHILD, WS_POPUP,
-    };
+    #[cfg(target_os = "windows")]
+    {
+        use windows::core::w;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            EnumWindows, FindWindowExW, FindWindowW, GetWindowLongPtrW, SendMessageW, SetParent,
+            SetWindowLongPtrW, GWL_STYLE, WS_CHILD, WS_POPUP,
+        };
 
-    unsafe {
-        // 1. 找到 Progman 并发送 0x052C 让系统创建壁纸 WorkerW
-        let progman = FindWindowW(w!("Progman"), None).unwrap_or_default();
-        if progman.is_invalid() {
-            log::warn!("Windows: 未找到 Progman 窗口，跳过桌面嵌入");
-            return Ok(());
+        unsafe {
+            // 1. 找到 Progman 并发送 0x052C 让系统创建壁纸 WorkerW
+            let progman = FindWindowW(w!("Progman"), None).unwrap_or_default();
+            if progman.is_invalid() {
+                log::warn!("Windows: 未找到 Progman 窗口，跳过桌面嵌入");
+                return Ok(());
+            }
+            let _ = SendMessageW(progman, 0x052C, WPARAM(0x000D as usize), LPARAM(1 as isize));
+
+            // 2. 枚举 WorkerW，找到不含 SHELLDLL_DefView（桌面图标）的那个 = 壁纸层
+            let mut wallpaper_worker: HWND = HWND::default();
+            EnumWindows(
+                Some(find_wallpaper_worker),
+                LPARAM(&mut wallpaper_worker as *mut HWND as isize),
+            );
+
+            if wallpaper_worker.is_invalid() {
+                log::warn!("Windows: 未找到壁纸 WorkerW，跳过桌面嵌入");
+                return Ok(());
+            }
+
+            // 3. 窗口子窗口化到壁纸 WorkerW（去掉 POPUP、加 CHILD）
+            // tauri 的 HWND 可能与本地 windows crate 版本不同，统一转成裸指针再包装
+            let hwnd = HWND(window.hwnd()?.0);
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+            SetWindowLongPtrW(hwnd, GWL_STYLE, ((style & !WS_POPUP.0) | WS_CHILD.0) as isize);
+            let _ = SetParent(hwnd, wallpaper_worker);
+
+            log::info!(
+                "Windows: 壁纸窗口已嵌入桌面层 hwnd={:?} worker={:?}",
+                hwnd,
+                wallpaper_worker
+            );
         }
-        let _ = SendMessageW(progman, 0x052C, WPARAM(0x000D as usize), LPARAM(1 as isize));
+    }
 
-        // 2. 枚举 WorkerW，找到不含 SHELLDLL_DefView（桌面图标）的那个 = 壁纸层
-        let mut wallpaper_worker: HWND = HWND::default();
-        EnumWindows(
-            Some(find_wallpaper_worker),
-            LPARAM(&mut wallpaper_worker as *mut HWND as isize),
-        );
-
-        if wallpaper_worker.is_invalid() {
-            log::warn!("Windows: 未找到壁纸 WorkerW，跳过桌面嵌入");
-            return Ok(());
-        }
-
-        // 3. 窗口子窗口化到壁纸 WorkerW（去掉 POPUP、加 CHILD）
-        // tauri 的 HWND 可能与本地 windows crate 版本不同，统一转成裸指针再包装
-        let hwnd = HWND(window.hwnd()?.0);
-        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
-        SetWindowLongPtrW(hwnd, GWL_STYLE, ((style & !WS_POPUP.0) | WS_CHILD.0) as isize);
-        let _ = SetParent(hwnd, wallpaper_worker);
-
-        log::info!(
-            "Windows: 壁纸窗口已嵌入桌面层 hwnd={:?} worker={:?}",
-            hwnd,
-            wallpaper_worker
-        );
+    #[cfg(not(target_os = "windows"))]
+    {
+        log::info!("非 Windows 平台，跳过桌面嵌入");
     }
 
     Ok(())
 }
 
 /// 枚举回调：找到没有桌面图标子窗口的 WorkerW（即壁纸背景层）
+#[cfg(target_os = "windows")]
 unsafe extern "system" fn find_wallpaper_worker(hwnd: HWND, lparam: LPARAM) -> BOOL {
     use windows::core::w;
-    use windows::Win32::Foundation::{BOOL, HWND};
     use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, GetClassNameW};
 
     let mut buf = [0u16; 256];
