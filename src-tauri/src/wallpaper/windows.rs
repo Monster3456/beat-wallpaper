@@ -8,20 +8,20 @@ use std::sync::Arc;
 /// 与 macOS 嵌入效果一致，不会遮挡任何窗口
 pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
     use windows::core::w;
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, FindWindowExW, FindWindowW, GetClassNameW, GetWindowLongPtrW, SendMessageW,
-        SetParent, SetWindowLongPtrW, GWL_STYLE, WS_CHILD, WS_POPUP,
+        EnumWindows, FindWindowExW, FindWindowW, GetWindowLongPtrW, SendMessageW, SetParent,
+        SetWindowLongPtrW, GWL_STYLE, WS_CHILD, WS_POPUP,
     };
 
     unsafe {
         // 1. 找到 Progman 并发送 0x052C 让系统创建壁纸 WorkerW
-        let progman = FindWindowW(w!("Progman"), None);
+        let progman = FindWindowW(w!("Progman"), None).unwrap_or(HWND(0));
         if progman.0 == 0 {
             log::warn!("Windows: 未找到 Progman 窗口，跳过桌面嵌入");
             return Ok(());
         }
-        let _ = SendMessageW(progman, 0x052C, WPARAM(0x000D), LPARAM(1));
+        let _ = SendMessageW(progman, 0x052C, WPARAM(0x000D as usize), LPARAM(1 as isize));
 
         // 2. 枚举 WorkerW，找到不含 SHELLDLL_DefView（桌面图标）的那个 = 壁纸层
         let mut wallpaper_worker: HWND = HWND(0);
@@ -39,7 +39,7 @@ pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
         let hwnd = window.hwnd()?;
         let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
         SetWindowLongPtrW(hwnd, GWL_STYLE, ((style & !WS_POPUP.0) | WS_CHILD.0) as isize);
-        SetParent(hwnd, wallpaper_worker);
+        let _ = SetParent(hwnd, wallpaper_worker);
 
         log::info!(
             "Windows: 壁纸窗口已嵌入桌面层 hwnd={:?} worker={:?}",
@@ -54,11 +54,13 @@ pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
 /// 枚举回调：找到没有桌面图标子窗口的 WorkerW（即壁纸背景层）
 unsafe extern "system" fn find_wallpaper_worker(hwnd: HWND, lparam: LPARAM) -> BOOL {
     use windows::core::w;
-    use windows::Win32::UI::WindowsAndMessaging::FindWindowExW;
+    use windows::Win32::Foundation::{BOOL, HWND};
+    use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, GetClassNameW};
+
     let mut buf = [0u16; 256];
-    let len = GetClassNameW(hwnd, &mut buf);
+    let len = GetClassNameW(hwnd, &mut buf).unwrap_or(0);
     if len > 0 && String::from_utf16_lossy(&buf[..len as usize]) == "WorkerW" {
-        let defview = FindWindowExW(hwnd, None, w!("SHELLDLL_DefView"), None);
+        let defview = FindWindowExW(hwnd, None, w!("SHELLDLL_DefView"), None).unwrap_or(HWND(0));
         if defview.0 == 0 {
             let target = lparam.0 as *mut HWND;
             *target = hwnd;
