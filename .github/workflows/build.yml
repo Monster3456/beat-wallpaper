@@ -19,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
@@ -27,12 +27,12 @@ jobs:
       - name: Install dependencies (macOS)
         if: matrix.platform == 'macos-latest'
         run: |
-          npm install
+          npm ci --no-audit --no-fund
 
       - name: Install dependencies (Windows)
         if: matrix.platform == 'windows-latest'
         run: |
-          npm install
+          npm ci --no-audit --no-fund
           choco install wixtoolset -y --no-progress
 
       - name: Build & Release
