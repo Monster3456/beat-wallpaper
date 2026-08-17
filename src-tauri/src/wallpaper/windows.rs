@@ -3,10 +3,69 @@ use tauri::WebviewWindow;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-/// 在 Windows 上将窗口嵌入桌面壁纸层
-pub fn setup_wallpaper_window(_window: &WebviewWindow) -> Result<()> {
-    log::info!("Windows wallpaper window setup - 待完善");
+/// 在 Windows 上将窗口嵌入桌面壁纸层（Progman/WorkerW 技法）：
+/// 把窗口设为壁纸 WorkerW 的子窗口——壁纸图片之上、桌面图标（SHELLDLL_DefView）之下，
+/// 与 macOS 嵌入效果一致，不会遮挡任何窗口
+pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
+    use windows::core::w;
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, FindWindowExW, FindWindowW, GetClassNameW, GetWindowLongPtrW, SendMessageW,
+        SetParent, SetWindowLongPtrW, GWL_STYLE, WS_CHILD, WS_POPUP,
+    };
+
+    unsafe {
+        // 1. 找到 Progman 并发送 0x052C 让系统创建壁纸 WorkerW
+        let progman = FindWindowW(w!("Progman"), None);
+        if progman.0 == 0 {
+            log::warn!("Windows: 未找到 Progman 窗口，跳过桌面嵌入");
+            return Ok(());
+        }
+        let _ = SendMessageW(progman, 0x052C, WPARAM(0x000D), LPARAM(1));
+
+        // 2. 枚举 WorkerW，找到不含 SHELLDLL_DefView（桌面图标）的那个 = 壁纸层
+        let mut wallpaper_worker: HWND = HWND(0);
+        EnumWindows(
+            Some(find_wallpaper_worker),
+            LPARAM(&mut wallpaper_worker as *mut HWND as isize),
+        );
+
+        if wallpaper_worker.0 == 0 {
+            log::warn!("Windows: 未找到壁纸 WorkerW，跳过桌面嵌入");
+            return Ok(());
+        }
+
+        // 3. 窗口子窗口化到壁纸 WorkerW（去掉 POPUP、加 CHILD）
+        let hwnd = window.hwnd()?;
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+        SetWindowLongPtrW(hwnd, GWL_STYLE, ((style & !WS_POPUP.0) | WS_CHILD.0) as isize);
+        SetParent(hwnd, wallpaper_worker);
+
+        log::info!(
+            "Windows: 壁纸窗口已嵌入桌面层 hwnd={:?} worker={:?}",
+            hwnd,
+            wallpaper_worker
+        );
+    }
+
     Ok(())
+}
+
+/// 枚举回调：找到没有桌面图标子窗口的 WorkerW（即壁纸背景层）
+unsafe extern "system" fn find_wallpaper_worker(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    use windows::core::w;
+    use windows::Win32::UI::WindowsAndMessaging::FindWindowExW;
+    let mut buf = [0u16; 256];
+    let len = GetClassNameW(hwnd, &mut buf);
+    if len > 0 && String::from_utf16_lossy(&buf[..len as usize]) == "WorkerW" {
+        let defview = FindWindowExW(hwnd, None, w!("SHELLDLL_DefView"), None);
+        if defview.0 == 0 {
+            let target = lparam.0 as *mut HWND;
+            *target = hwnd;
+            return BOOL(0); // 停止枚举
+        }
+    }
+    BOOL(1)
 }
 
 /// 读取 Windows 系统壁纸路径（注册表 HKCU\Control Panel\Desktop\WallPaper）

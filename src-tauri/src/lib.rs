@@ -269,6 +269,25 @@ pub fn run() {
                 } else {
                     log::warn!("读取 Windows 系统壁纸失败");
                 }
+
+                // 定时检查系统壁纸是否更换（每 5 秒，与 macOS 同步）
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let mut last = String::new();
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                        if let Ok(path) = wallpaper::get_system_wallpaper_path() {
+                            if path != last {
+                                last = path;
+                                let _ = handle.emit("wallpaper-changed", serde_json::json!({
+                                    "path": last,
+                                    "isVideo": false
+                                }));
+                                log::info!("系统壁纸已更换: {}", last);
+                            }
+                        }
+                    }
+                });
             }
 
             #[cfg(target_os = "macos")]
