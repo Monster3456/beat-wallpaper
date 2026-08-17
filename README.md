@@ -71,10 +71,17 @@ src-tauri/
 
 ## 📥 下载
 
-**v0.1.0（macOS ARM64）**
+最新版本由 GitHub Actions 自动构建发布：推送 `v*` 标签即触发双平台打包。
 
-[⬇ BeatWallpaper_0.1.0_aarch64.dmg](https://github.com/Monster3456/beat-wallpaper/releases/download/v0.1.0/BeatWallpaper_0.1.0_aarch64.dmg)
+**v0.2.0**
+
+| 平台 | 安装包 |
+|------|--------|
+| macOS（Apple Silicon） | [⬇ BeatWallpaper_0.2.0_aarch64.dmg](https://github.com/Monster3456/beat-wallpaper/releases/download/v0.2.0/BeatWallpaper_0.2.0_aarch64.dmg) |
+| Windows x64 | [⬇ BeatWallpaper_0.2.0_x64-setup.exe](https://github.com/Monster3456/beat-wallpaper/releases/download/v0.2.0/BeatWallpaper_0.2.0_x64-setup.exe) 或 [.msi](https://github.com/Monster3456/beat-wallpaper/releases/download/v0.2.0/BeatWallpaper_0.2.0_x64_en-US.msi) |
+
+**自动更新**：v0.2.0 起应用内置更新器，新版本发布后启动应用会自动检测并提示更新。
 
 > 首次打开 `.app` 若提示"未识别的开发者"，前往 **系统设置 → 隐私与安全性**，点击"仍要打开"即可。
 >
-> **Windows 版本说明**：Windows 壁纸嵌入层尚未完善（`setup_wallpaper_window` 为存根），应用可以运行但窗口不会嵌入桌面图标下方。Windows 打包需 Windows 开发环境，欢迎 PR 或在 Issues 中反馈需求。
+> **Windows 说明**：Windows 安装包已提供，但壁纸嵌入层（窗口置于桌面图标下方）尚未完善，应用以普通窗口形式运行，效果与 macOS 版一致。
