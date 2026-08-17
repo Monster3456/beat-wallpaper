@@ -15,8 +15,8 @@ pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
     {
         use windows::core::w;
         use windows::Win32::UI::WindowsAndMessaging::{
-            EnumWindows, FindWindowW, SendMessageW, SetParent, SetWindowPos,
-            SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+            EnumWindows, FindWindowW, SendMessageW, SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE,
+            SWP_NOSIZE, SWP_NOOWNERZORDER, SWP_SHOWWINDOW,
         };
 
         unsafe {
@@ -40,19 +40,17 @@ pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
                 return Ok(());
             }
 
-            // 3. 直接 SetParent 到壁纸 WorkerW（不改为 WS_CHILD，保持 WS_POPUP）
-            //     WebView2 在 WS_CHILD 下会中断渲染，保持 popup 只做父窗口关联即可
+            // 3. 用 z-order 插入：窗口放在壁纸 WorkerW 之上、桌面图标之下
+            //    不改变父窗口（SetParent 会让 WebView2 渲染中断），保持顶层窗口
             let hwnd = HWND(window.hwnd()?.0);
-            SetParent(hwnd, wallpaper_worker);
-            // 强制重绘确保 WebView2 渲染正常
             let _ = SetWindowPos(
                 hwnd,
-                HWND::default(),
+                wallpaper_worker,
                 0,
                 0,
                 0,
                 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW,
             );
 
             log::info!(
