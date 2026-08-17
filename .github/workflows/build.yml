@@ -5,6 +5,9 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -100,4 +103,6 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.sig
             src-tauri/target/release/bundle/msi/*.msi
             update.json
-          generate_release_notes: true
+          body: |
+            自动构建发布（macOS + Windows）。
+            已包含应用内自动更新所需的 update.json 与签名文件。
