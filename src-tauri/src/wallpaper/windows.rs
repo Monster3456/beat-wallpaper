@@ -88,35 +88,29 @@ unsafe extern "system" fn find_wallpaper_worker(hwnd: HWND, lparam: LPARAM) -> B
     BOOL(1)
 }
 
-/// 读取 Windows 系统壁纸路径（注册表 HKCU\Control Panel\Desktop\WallPaper）
+/// 读取 Windows 系统壁纸路径（SystemParametersInfoW 可处理幻灯片/聚焦等所有壁纸类型）
 #[cfg(target_os = "windows")]
 pub fn get_system_wallpaper_path() -> Result<String> {
-    use windows::core::PCWSTR;
-    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETDESKWALLPAPER,
+    };
+    use windows::Win32::Foundation::FALSE;
 
     unsafe {
-        let mut buf = [0u16; 1024];
-        let mut len = (buf.len() * 2) as u32;
-        let path = PCWSTR::from_raw(
-            "Control Panel\\Desktop".encode_utf16().collect::<Vec<u16>>().as_ptr(),
+        let mut buf = [0u16; 260];
+        let result = SystemParametersInfoW(
+            SPI_GETDESKWALLPAPER,
+            0,
+            Some(buf.as_mut_ptr() as *mut core::ffi::c_void),
+            0,
         );
-        let name = PCWSTR::from_raw("WallPaper".encode_utf16().collect::<Vec<u16>>().as_ptr());
-        let status = RegGetValueW(
-            HKEY_CURRENT_USER,
-            path,
-            name,
-            RRF_RT_REG_SZ,
-            None,
-            Some(buf.as_mut_ptr() as *mut _),
-            Some(&mut len),
-        );
-        if status.is_err() {
-            anyhow::bail!("读取注册表壁纸失败");
+        if result == FALSE {
+            anyhow::bail!("获取系统壁纸路径失败");
         }
         let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-        let path_str = String::from_utf16_lossy(&buf[..end]);
-        log::info!("Windows 系统壁纸: {}", path_str);
-        Ok(path_str)
+        let path = String::from_utf16_lossy(&buf[..end]);
+        log::info!("Windows 系统壁纸: {}", path);
+        Ok(path)
     }
 }
 
