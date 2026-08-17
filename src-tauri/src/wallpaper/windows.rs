@@ -15,6 +15,7 @@ static FULLSCREEN_CHECK: std::sync::OnceLock<Arc<AtomicBool>> = std::sync::OnceL
 pub fn is_fullscreen_app_running() -> bool {
     #[cfg(target_os = "windows")]
     unsafe {
+        use windows::Win32::Foundation::FALSE;
         use windows::Win32::Graphics::Gdi::{
             GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
         };
@@ -31,7 +32,7 @@ pub fn is_fullscreen_app_running() -> bool {
             cbSize: std::mem::size_of::<MONITORINFO>() as u32,
             ..Default::default()
         };
-        if GetMonitorInfoW(monitor, &mut info).is_err() {
+        if GetMonitorInfoW(monitor, &mut info) == FALSE {
             return false;
         }
         let screen_w = info.rcMonitor.right - info.rcMonitor.left;
