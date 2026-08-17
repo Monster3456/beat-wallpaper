@@ -17,6 +17,8 @@ import {
   selectWallpaper,
 } from './audioBridge';
 import type { AudioData, Theme, Settings } from './types';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 
 /**
  * 双窗口架构：
