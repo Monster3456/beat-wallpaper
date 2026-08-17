@@ -28,10 +28,10 @@ jobs:
         if: matrix.platform == 'macos-latest'
         shell: bash
         run: |
-          npm config set fetch-retries 5 --location=project
-          npm config set fetch-retry-mintimeout 20000 --location=project
+          corepack enable
+          corepack prepare npm@11 --activate
           for i in 1 2 3; do
-            npm ci --no-audit --no-fund && break
+            npm ci --no-audit --no-fund --no-progress && break
             echo "npm ci 第 $i 次失败，重试..."
             sleep 15
           done
@@ -40,10 +40,10 @@ jobs:
         if: matrix.platform == 'windows-latest'
         shell: bash
         run: |
-          npm config set fetch-retries 5 --location=project
-          npm config set fetch-retry-mintimeout 20000 --location=project
+          corepack enable
+          corepack prepare npm@11 --activate
           for i in 1 2 3; do
-            npm ci --no-audit --no-fund && break
+            npm ci --no-audit --no-fund --no-progress && break
             echo "npm ci 第 $i 次失败，重试..."
             sleep 15
           done
