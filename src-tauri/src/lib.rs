@@ -253,7 +253,24 @@ pub fn run() {
             // 启动音频捕获
             let _ = audio::capture::start_audio_capture();
 
-            // 读取系统当前壁纸并跟随变化
+            // 读取系统当前壁纸并跟随变化（macOS：NSWorkspace；Windows：注册表）
+            #[cfg(target_os = "windows")]
+            {
+                if let Ok(path) = wallpaper::get_system_wallpaper_path() {
+                    let state = app.state::<AppState>();
+                    *state.current_wallpaper.lock().unwrap() = Some(PathBuf::from(&path));
+                    *state.is_video.lock().unwrap() = false;
+
+                    let _ = app.emit("wallpaper-changed", serde_json::json!({
+                        "path": path,
+                        "isVideo": false
+                    }));
+                    log::info!("跟随系统壁纸: {}", path);
+                } else {
+                    log::warn!("读取 Windows 系统壁纸失败");
+                }
+            }
+
             #[cfg(target_os = "macos")]
             {
                 if let Ok(path) = wallpaper::get_system_wallpaper_path() {

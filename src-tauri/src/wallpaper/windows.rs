@@ -9,6 +9,43 @@ pub fn setup_wallpaper_window(_window: &WebviewWindow) -> Result<()> {
     Ok(())
 }
 
+/// 读取 Windows 系统壁纸路径（注册表 HKCU\Control Panel\Desktop\WallPaper）
+#[cfg(target_os = "windows")]
+pub fn get_system_wallpaper_path() -> Result<String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
+
+    unsafe {
+        let mut buf = [0u16; 1024];
+        let mut len = (buf.len() * 2) as u32;
+        let path = PCWSTR::from_raw(
+            "Control Panel\\Desktop".encode_utf16().collect::<Vec<u16>>().as_ptr(),
+        );
+        let name = PCWSTR::from_raw("WallPaper".encode_utf16().collect::<Vec<u16>>().as_ptr());
+        let status = RegGetValueW(
+            HKEY_CURRENT_USER,
+            path,
+            name,
+            RRF_RT_REG_SZ,
+            None,
+            Some(buf.as_mut_ptr() as *mut _),
+            Some(&mut len),
+        );
+        if status.is_err() {
+            anyhow::bail!("读取注册表壁纸失败");
+        }
+        let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        let path_str = String::from_utf16_lossy(&buf[..end]);
+        log::info!("Windows 系统壁纸: {}", path_str);
+        Ok(path_str)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_system_wallpaper_path() -> Result<String> {
+    anyhow::bail!("仅 Windows 支持")
+}
+
 static FULLSCREEN_CHECK: std::sync::OnceLock<Arc<AtomicBool>> = std::sync::OnceLock::new();
 
 /// 检测是否全屏应用运行中

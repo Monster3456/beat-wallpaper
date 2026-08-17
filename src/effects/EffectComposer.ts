@@ -54,10 +54,21 @@ export class EffectComposer {
     // 关键：相机必须远离 z=0 平面，否则与壁纸共面不可见
     this.camera.position.z = 1;
 
-    // 默认黑色背景
-    // 注意：color 会与 map 相乘，必须用白色否则壁纸纹理显示为全黑
+    // 默认背景：深色渐变纹理（无壁纸时也不是白屏；注意 color 需为白色否则纹理变黑）
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+    const grad = ctx.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#1a1a2e');
+    grad.addColorStop(1, '#0d0d18');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 256);
     const geo = new THREE.PlaneGeometry(2, 2);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      map: new THREE.CanvasTexture(canvas),
+    });
     this.bgMesh = new THREE.Mesh(geo, mat);
     this.scene.add(this.bgMesh);
 
