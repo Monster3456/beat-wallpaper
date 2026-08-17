@@ -26,13 +26,27 @@ jobs:
 
       - name: Install dependencies (macOS)
         if: matrix.platform == 'macos-latest'
+        shell: bash
         run: |
-          npm ci --no-audit --no-fund
+          npm config set fetch-retries 5 --location=project
+          npm config set fetch-retry-mintimeout 20000 --location=project
+          for i in 1 2 3; do
+            npm ci --no-audit --no-fund && break
+            echo "npm ci 第 $i 次失败，重试..."
+            sleep 15
+          done
 
       - name: Install dependencies (Windows)
         if: matrix.platform == 'windows-latest'
+        shell: bash
         run: |
-          npm ci --no-audit --no-fund
+          npm config set fetch-retries 5 --location=project
+          npm config set fetch-retry-mintimeout 20000 --location=project
+          for i in 1 2 3; do
+            npm ci --no-audit --no-fund && break
+            echo "npm ci 第 $i 次失败，重试..."
+            sleep 15
+          done
           choco install wixtoolset -y --no-progress
 
       - name: Build & Release
