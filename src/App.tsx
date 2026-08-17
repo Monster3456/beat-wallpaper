@@ -112,6 +112,22 @@ function WallpaperApp() {
     return () => stopAudioPolling(() => {});
   }, []);
 
+  // 检查应用更新（非阻塞）
+  useEffect(() => {
+    const updateCheck = async () => {
+      try {
+        const update = await check();
+        if (update?.available) {
+          await update.downloadAndInstall();
+          await relaunch();
+        }
+      } catch (e) {
+        // 静默失败——联网超时/无更新均不打扰用户
+      }
+    };
+    updateCheck();
+  }, []);
+
   // 诊断：每 2 秒记录音频状态（确认数据到达壁纸窗口）
   useEffect(() => {
     if (!audioData) return;

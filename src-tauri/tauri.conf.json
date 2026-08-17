@@ -41,6 +41,12 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "active": true,
+      "endpoints": ["https://github.com/Monster3456/beat-wallpaper/releases/latest/download/update.json"],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE0QUVCQTczNTE3QTI2M0MKUldROEpucFJjN3F1cEpHTXFQeWxYU2hMMVpmUHJuUmpDT2V3SlRqWHFWWW1rU1ZSZW1IZlJ3RTQK"
     }
   }
 }
