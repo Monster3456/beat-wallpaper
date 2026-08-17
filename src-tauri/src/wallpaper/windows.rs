@@ -16,27 +16,28 @@ pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
 
     unsafe {
         // 1. 找到 Progman 并发送 0x052C 让系统创建壁纸 WorkerW
-        let progman = FindWindowW(w!("Progman"), None).unwrap_or(HWND(0));
-        if progman.0 == 0 {
+        let progman = FindWindowW(w!("Progman"), None).unwrap_or_default();
+        if progman.is_invalid() {
             log::warn!("Windows: 未找到 Progman 窗口，跳过桌面嵌入");
             return Ok(());
         }
         let _ = SendMessageW(progman, 0x052C, WPARAM(0x000D as usize), LPARAM(1 as isize));
 
         // 2. 枚举 WorkerW，找到不含 SHELLDLL_DefView（桌面图标）的那个 = 壁纸层
-        let mut wallpaper_worker: HWND = HWND(0);
+        let mut wallpaper_worker: HWND = HWND::default();
         EnumWindows(
             Some(find_wallpaper_worker),
             LPARAM(&mut wallpaper_worker as *mut HWND as isize),
         );
 
-        if wallpaper_worker.0 == 0 {
+        if wallpaper_worker.is_invalid() {
             log::warn!("Windows: 未找到壁纸 WorkerW，跳过桌面嵌入");
             return Ok(());
         }
 
         // 3. 窗口子窗口化到壁纸 WorkerW（去掉 POPUP、加 CHILD）
-        let hwnd = window.hwnd()?;
+        // tauri 的 HWND 可能与本地 windows crate 版本不同，统一转成裸指针再包装
+        let hwnd = HWND(window.hwnd()?.0);
         let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
         SetWindowLongPtrW(hwnd, GWL_STYLE, ((style & !WS_POPUP.0) | WS_CHILD.0) as isize);
         let _ = SetParent(hwnd, wallpaper_worker);
@@ -58,10 +59,10 @@ unsafe extern "system" fn find_wallpaper_worker(hwnd: HWND, lparam: LPARAM) -> B
     use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, GetClassNameW};
 
     let mut buf = [0u16; 256];
-    let len = GetClassNameW(hwnd, &mut buf).unwrap_or(0);
+    let len = GetClassNameW(hwnd, &mut buf);
     if len > 0 && String::from_utf16_lossy(&buf[..len as usize]) == "WorkerW" {
-        let defview = FindWindowExW(hwnd, None, w!("SHELLDLL_DefView"), None).unwrap_or(HWND(0));
-        if defview.0 == 0 {
+        let defview = FindWindowExW(hwnd, None, w!("SHELLDLL_DefView"), None).unwrap_or_default();
+        if defview.is_invalid() {
             let target = lparam.0 as *mut HWND;
             *target = hwnd;
             return BOOL(0); // 停止枚举
