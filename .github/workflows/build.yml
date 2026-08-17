@@ -33,7 +33,7 @@ jobs:
         if: matrix.platform == 'windows-latest'
         run: |
           npm install
-          # Windows 需要 WebView2 运行时（预装在 Windows 10+）
+          choco install wixtoolset -y --no-progress
 
       - name: Build & Release
         uses: tauri-apps/tauri-action@v0
