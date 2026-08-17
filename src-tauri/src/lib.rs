@@ -328,6 +328,9 @@ pub fn run() {
                     .always_on_bottom(true)
                     .build()?;
 
+                    // 立即应用壁纸效果层（不依赖前端回调，防止窗口以普通层级显示遮挡应用）
+                    wallpaper::setup_wallpaper_window(&win)?;
+
                     // 物理坐标定位（LogicalPosition 转换在主屏失效导致窗口不可见）
                     let lw = size.width as f64 / scale;
                     let lh = size.height as f64 / scale;

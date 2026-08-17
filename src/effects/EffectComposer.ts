@@ -177,11 +177,15 @@ export class EffectComposer {
   private animate = () => {
     requestAnimationFrame(this.animate);
     if (this.pixel8Bit.isVisible()) {
-      // 8-bit 模式：主场景 → 低分辨率 → 像素化放大
-      this.pixel8Bit.render(this.renderer, this.scene, this.camera);
-    } else {
-      this.renderer.render(this.scene, this.camera);
+      // 8-bit 模式：主场景 + 前景层 → 低分辨率 → 像素化放大（覆盖音波/光晕/招牌效果）
+      this.pixel8Bit.render(this.renderer, this.scene, this.camera, (r) => {
+        if (this.atmosphere.isVisible()) this.atmosphere.render(r);
+        if (this.signature.isVisible()) this.signature.render(r);
+        if (this.waveformBars.isVisible()) this.waveformBars.render(r);
+      });
+      return;
     }
+    this.renderer.render(this.scene, this.camera);
     // 前景层：氛围光晕 → 招牌效果 → 音波条
     if (this.atmosphere.isVisible()) {
       this.atmosphere.render(this.renderer);

@@ -3,35 +3,34 @@ use objc::runtime::Object;
 use tauri::WebviewWindow;
 
 // CGWindowLevelKey 枚举值
-const KCG_DESKTOP_ICON_WINDOW_LEVEL_KEY: i32 = 3;
-const KCG_DESKTOP_WINDOW_LEVEL_KEY: i32 = 4;
+const KCG_DESKTOP_ICON_WINDOW_LEVEL_KEY: i32 = 5; // kCGDesktopIconWindowLevelKey
 
 extern "C" {
     fn CGWindowLevelForKey(key: i32) -> i32;
 }
 
-/// 查询系统实际的桌面层级值（macOS 各版本可能不同，不能硬编码）
-fn system_desktop_level() -> i32 {
-    unsafe { CGWindowLevelForKey(KCG_DESKTOP_WINDOW_LEVEL_KEY) }
+/// 壁纸效果层：桌面图标层级 - 1（壁纸图片之上、桌面图标与所有普通窗口之下）
+/// 之前误用 key=4（kCGNormalWindowLevelKey=0）导致与普通窗口同级、会盖住其他窗口
+fn wallpaper_layer_level() -> i32 {
+    unsafe { CGWindowLevelForKey(KCG_DESKTOP_ICON_WINDOW_LEVEL_KEY) - 1 }
 }
 
-/// 在 macOS 上将窗口设置为壁纸层级
-/// 使用系统实际查询的桌面层级（壁纸之上、桌面图标之下）
+/// 在 macOS 上将窗口设置为壁纸效果层（桌面图标之下、壁纸图片之上）
 pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
     let ns_window = window.ns_window().map_err(|e| {
         anyhow::anyhow!("获取 NSWindow 失败: {}", e)
     })?;
 
-    let desktop_level = system_desktop_level();
-    log::info!("系统桌面层级值: {}", desktop_level);
+    let wallpaper_level = wallpaper_layer_level();
+    log::info!("壁纸效果层级值: {}", wallpaper_level);
 
     unsafe {
         use objc::{msg_send, sel, sel_impl};
 
         let ns_window = ns_window as *mut Object;
 
-        // 设置窗口层级为系统桌面壁纸层
-        let _: () = msg_send![ns_window, setLevel: desktop_level as i64];
+        // 设置窗口层级为壁纸效果层（低于所有普通窗口，永不遮挡应用）
+        let _: () = msg_send![ns_window, setLevel: wallpaper_level as i64];
 
         // 让窗口忽略鼠标事件（穿透）
         let yes: i8 = 1;

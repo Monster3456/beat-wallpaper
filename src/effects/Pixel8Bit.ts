@@ -119,10 +119,21 @@ export class Pixel8Bit {
     }
   }
 
-  /** 渲染主场景到低分辨率再放大显示（由 EffectComposer 调用） */
-  render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
+  /** 渲染主场景到低分辨率再放大显示（由 EffectComposer 调用）
+   *  extra：把前景层（音波/氛围/招牌）一并渲染进低分辨率目标，8bit 风格覆盖全部效果 */
+  render(
+    renderer: THREE.WebGLRenderer,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    extra?: (r: THREE.WebGLRenderer) => void,
+  ) {
     renderer.setRenderTarget(this.renderTarget);
     renderer.render(scene, camera);
+    if (extra) {
+      renderer.autoClear = false;
+      extra(renderer);
+      renderer.autoClear = true;
+    }
     renderer.setRenderTarget(null);
     renderer.render(this.quadScene, this.quadCamera);
   }
