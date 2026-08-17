@@ -58,16 +58,24 @@ jobs:
 
       - name: Assemble update.json
         shell: bash
+        env:
+          # 用非 TAURI_* 前缀的环境变量传递密钥，避免 tauri CLI 自动注入导致参数冲突
+          SIGN_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          SIGN_PASS: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           TAG="v${VERSION}"
           KEY="${{ matrix.update_key }}"
           if [ "$KEY" = "darwin-aarch64" ]; then
-            ARTIFACT=$(ls src-tauri/target/release/bundle/dmg/*.dmg | head -1)
+            # macOS 更新包是 .app.tar.gz（DMG 仅用于用户下载）
+            ARTIFACT=$(ls src-tauri/target/release/bundle/macos/*.app.tar.gz | head -1)
           else
             ARTIFACT=$(ls src-tauri/target/release/bundle/nsis/*.exe | head -1)
           fi
-          # tauri build 已用签名密钥生成 .sig（构建步骤 env 已注入）
+          # 显式签名：写 key 文件 + 显式传参
+          echo "$SIGN_KEY" > /tmp/sign.key
+          node node_modules/@tauri-apps/cli/tauri.js signer sign \
+            --private-key-path /tmp/sign.key --password "$SIGN_PASS" "$ARTIFACT"
           SIGNATURE=$(cat "$ARTIFACT.sig")
           python3 - "$VERSION" "$TAG" "$KEY" "$SIGNATURE" "$(basename "$ARTIFACT")" <<'PYEOF'
           import json, sys, datetime
@@ -92,8 +100,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ matrix.artifact_glob }}
-            src-tauri/target/release/bundle/dmg/*.sig
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/release/bundle/macos/*.sig
+            src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/nsis/*.sig
+            src-tauri/target/release/bundle/msi/*.msi
             update.json
           generate_release_notes: true

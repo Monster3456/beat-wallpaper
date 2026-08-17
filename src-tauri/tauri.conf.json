@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicepkg/nicepkg/main/packages/cli/tauri.conf.schema.json",
   "productName": "BeatWallpaper",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.beatwallpaper.app",
   "build": {
     "beforeDevCommand": "npm run dev",

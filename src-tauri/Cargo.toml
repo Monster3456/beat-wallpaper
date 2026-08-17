@@ -1,6 +1,6 @@
 [package]
 name = "beat-wallpaper"
-version = "0.1.0"
+version = "0.2.0"
 description = "音乐律动壁纸 - 随音乐跳动的桌面壁纸"
 authors = ["BeatWallpaper Team"]
 edition = "2021"
