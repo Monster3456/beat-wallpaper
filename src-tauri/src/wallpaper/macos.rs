@@ -2,17 +2,17 @@ use anyhow::Result;
 use objc::runtime::Object;
 use tauri::WebviewWindow;
 
-// CGWindowLevelKey 枚举值
-const KCG_DESKTOP_ICON_WINDOW_LEVEL_KEY: i32 = 5; // kCGDesktopIconWindowLevelKey
+// CGWindowLevelKey 枚举值（macOS 26 起新增了多个层级，桌面图标键不再是 5）
+const KCG_DESKTOP_WINDOW_LEVEL_KEY: i32 = 2; // kCGDesktopWindowLevelKey
 
 extern "C" {
     fn CGWindowLevelForKey(key: i32) -> i32;
 }
 
 /// 壁纸效果层：桌面图标层级 - 1（壁纸图片之上、桌面图标与所有普通窗口之下）
-/// 之前误用 key=4（kCGNormalWindowLevelKey=0）导致与普通窗口同级、会盖住其他窗口
+/// 桌面图标层级 = 桌面壁纸层级 + 20（跨版本稳定），避免依赖具体枚举值
 fn wallpaper_layer_level() -> i32 {
-    unsafe { CGWindowLevelForKey(KCG_DESKTOP_ICON_WINDOW_LEVEL_KEY) - 1 }
+    unsafe { CGWindowLevelForKey(KCG_DESKTOP_WINDOW_LEVEL_KEY) + 19 }
 }
 
 /// 在 macOS 上将窗口设置为壁纸效果层（桌面图标之下、壁纸图片之上）

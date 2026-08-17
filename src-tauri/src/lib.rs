@@ -325,7 +325,8 @@ pub fn run() {
                     .focusable(false)
                     .shadow(false)
                     .skip_taskbar(true)
-                    .always_on_bottom(true)
+                    // 层级由 setup_wallpaper_window 管理（always_on_bottom 会在 show 时
+                    // 被 tauri 重新应用并覆盖我们的 setLevel，故不用）
                     .build()?;
 
                     // 立即应用壁纸效果层（不依赖前端回调，防止窗口以普通层级显示遮挡应用）
@@ -364,6 +365,8 @@ pub fn run() {
                         if let Err(e) = w.show() {
                             log::error!("显示壁纸窗口失败: {}", e);
                         }
+                        // show 之后重新应用层级（防止显示过程重置层级）
+                        let _ = wallpaper::setup_wallpaper_window(w);
                         // 重新应用保存的 frame（show 后可能被系统重置）
                         let _ = w.set_position(tauri::PhysicalPosition::new(f.0 as i32, f.1 as i32));
                         let _ = w.set_size(tauri::LogicalSize::new(f.2, f.3));
