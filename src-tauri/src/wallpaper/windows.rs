@@ -15,8 +15,8 @@ pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
     {
         use windows::core::w;
         use windows::Win32::UI::WindowsAndMessaging::{
-            EnumWindows, FindWindowW, GetWindowLongPtrW, SendMessageW, SetParent,
-            SetWindowLongPtrW, GWL_STYLE, WS_CHILD, WS_POPUP,
+            EnumWindows, FindWindowW, SendMessageW, SetParent, SetWindowPos,
+            SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
         };
 
         unsafe {
@@ -40,12 +40,20 @@ pub fn setup_wallpaper_window(window: &WebviewWindow) -> Result<()> {
                 return Ok(());
             }
 
-            // 3. 窗口子窗口化到壁纸 WorkerW（去掉 POPUP、加 CHILD）
-            // tauri 的 HWND 可能与本地 windows crate 版本不同，统一转成裸指针再包装
+            // 3. 直接 SetParent 到壁纸 WorkerW（不改为 WS_CHILD，保持 WS_POPUP）
+            //     WebView2 在 WS_CHILD 下会中断渲染，保持 popup 只做父窗口关联即可
             let hwnd = HWND(window.hwnd()?.0);
-            let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
-            SetWindowLongPtrW(hwnd, GWL_STYLE, ((style & !WS_POPUP.0) | WS_CHILD.0) as isize);
-            let _ = SetParent(hwnd, wallpaper_worker);
+            SetParent(hwnd, wallpaper_worker);
+            // 强制重绘确保 WebView2 渲染正常
+            let _ = SetWindowPos(
+                hwnd,
+                HWND::default(),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            );
 
             log::info!(
                 "Windows: 壁纸窗口已嵌入桌面层 hwnd={:?} worker={:?}",
