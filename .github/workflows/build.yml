@@ -58,9 +58,6 @@ jobs:
 
       - name: Assemble update.json
         shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           TAG="v${VERSION}"
@@ -70,12 +67,11 @@ jobs:
           else
             ARTIFACT=$(ls src-tauri/target/release/bundle/nsis/*.exe | head -1)
           fi
-          SIGNATURE=$(node node_modules/@tauri-apps/cli/tauri.js signer sign -f "$ARTIFACT")
-          SIGNATURE_B64=$(echo "$SIGNATURE" | base64)
-          python3 - "$VERSION" "$TAG" "$KEY" "$SIGNATURE_B64" "$(basename "$ARTIFACT")" <<'PYEOF'
-          import json, sys, base64, datetime
-          version, tag, key, sig_b64, fname = sys.argv[1:6]
-          sig = base64.b64decode(sig_b64).decode()
+          # tauri build 已用签名密钥生成 .sig（构建步骤 env 已注入）
+          SIGNATURE=$(cat "$ARTIFACT.sig")
+          python3 - "$VERSION" "$TAG" "$KEY" "$SIGNATURE" "$(basename "$ARTIFACT")" <<'PYEOF'
+          import json, sys, datetime
+          version, tag, key, sig, fname = sys.argv[1:6]
           data = {
             "version": version,
             "notes": f"v{version} 自动构建发布",

@@ -15,23 +15,33 @@ static FULLSCREEN_CHECK: std::sync::OnceLock<Arc<AtomicBool>> = std::sync::OnceL
 pub fn is_fullscreen_app_running() -> bool {
     #[cfg(target_os = "windows")]
     unsafe {
-        let hwnd = windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow();
-        if hwnd.0 == 0 {
+        use windows::Win32::Graphics::Gdi::{
+            GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
+
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_invalid() {
             return false;
         }
 
+        // 用显示器信息判断全屏（不依赖 GetSystemMetrics 的 feature 归属）
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(monitor, &mut info).is_err() {
+            return false;
+        }
+        let screen_w = info.rcMonitor.right - info.rcMonitor.left;
+        let screen_h = info.rcMonitor.bottom - info.rcMonitor.top;
+
         let mut rect = std::mem::zeroed();
-        windows::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut rect);
+        GetWindowRect(hwnd, &mut rect);
 
         let width = rect.right - rect.left;
         let height = rect.bottom - rect.top;
-
-        let screen_w = windows::Win32::Graphics::Gdi::GetSystemMetrics(
-            windows::Win32::Graphics::Gdi::SM_CXSCREEN,
-        );
-        let screen_h = windows::Win32::Graphics::Gdi::GetSystemMetrics(
-            windows::Win32::Graphics::Gdi::SM_CYSCREEN,
-        );
 
         width >= screen_w && height >= screen_h
     }

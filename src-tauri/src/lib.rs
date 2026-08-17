@@ -407,6 +407,7 @@ pub fn run() {
         .run(|app_handle, event| {
             // macOS: 点击 Dock 图标时打开设置窗口（懒创建）
             match event {
+                #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => {
                     log::info!("Dock 图标点击 (Reopen)");
                     open_settings_window(app_handle);
